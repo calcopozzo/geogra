@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8">
-  <title>等時間線マップ（Isochrone Map） Step2</title>
+  <title>等時間線マップ（マーカー付き）</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
@@ -41,6 +41,30 @@
       margin-top: 5px;
       font-size: 13px;
     }
+    .legend {
+      position: absolute;
+      bottom: 10px;
+      right: 10px;
+      background: rgba(255,255,255,0.95);
+      padding: 10px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-family: sans-serif;
+      z-index: 1000;
+    }
+    .legend-color {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      margin-right: 5px;
+      vertical-align: middle;
+    }
+    @media (max-width: 600px) {
+      .control-panel {
+        flex-direction: column;
+        width: 90%;
+      }
+    }
   </style>
 </head>
 <body>
@@ -53,6 +77,8 @@
     <select id="profile">
       <option value="foot-walking">徒歩</option>
       <option value="driving-car">車</option>
+      <option value="cycling-regular">自転車</option>
+      <option value="public-transport">公共交通</option>
     </select>
   </label>
 </div>
@@ -62,18 +88,28 @@
   <div id="locationList"></div>
 </div>
 
+<div class="legend">
+  <div><span class="legend-color" style="background:#ff6666"></span>10分圏内</div>
+  <div><span class="legend-color" style="background:#ffcc33"></span>20分圏内</div>
+  <div><span class="legend-color" style="background:#66cc66"></span>30分圏内</div>
+</div>
+
 <script>
-  const apiKey = '5b3ce3597851110001cf6248a2be22bc444b40739cbb57baf0661984';
+  const apiKey = 'YOUR_OPENROUTESERVICE_API_KEY';
   const map = L.map('map').setView([35.6812, 139.7671], 13);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '© OpenStreetMap contributors'
   }).addTo(map);
 
   let isochroneLayer = null;
+  let marker = null;
 
   map.on('click', function (e) {
     const lat = e.latlng.lat;
     const lng = e.latlng.lng;
+
+    if (marker) map.removeLayer(marker);
+    marker = L.marker([lat, lng]).addTo(map);
 
     const name = prompt("この地点に名前をつけて保存しますか？（例：学校前）");
     if (name) {
@@ -106,15 +142,15 @@
         style: function (feature) {
           const time = feature.properties.value;
           const colors = {
-            600: '#cce5ff',
-            1200: '#66b3ff',
-            1800: '#0066cc'
+            600: '#ff6666',
+            1200: '#ffcc33',
+            1800: '#66cc66'
           };
           return {
-            color: '#0055aa',
+            color: '#333',
             weight: 1,
-            fillColor: colors[time] || '#0078ff',
-            fillOpacity: 0.4
+            fillColor: colors[time] || '#999999',
+            fillOpacity: 0.5
           };
         }
       }).addTo(map);
@@ -147,6 +183,10 @@
   window.goTo = function(index) {
     const locations = JSON.parse(localStorage.getItem('savedLocations') || '[]');
     const loc = locations[index];
+
+    if (marker) map.removeLayer(marker);
+    marker = L.marker([loc.lat, loc.lng]).addTo(map);
+
     drawIsochrone(loc.lat, loc.lng);
   }
 
