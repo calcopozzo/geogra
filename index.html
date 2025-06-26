@@ -2,23 +2,19 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8">
-  <title>等時間線マップ（Isochrone Map）</title>
+  <title>等時間線マップ（Isochrone Map） Step2</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-  <!-- Leaflet読み込み -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-
   <style>
     html, body { margin: 0; padding: 0; height: 100%; }
     #map { height: 100%; }
-
     .control-panel {
       position: absolute;
       top: 10px;
       left: 50%;
       transform: translateX(-50%);
-      background: rgba(255, 255, 255, 0.9);
+      background: rgba(255, 255, 255, 0.95);
       padding: 10px;
       border-radius: 8px;
       font-family: sans-serif;
@@ -27,16 +23,23 @@
       flex-wrap: wrap;
       gap: 8px;
     }
-
-    .control-panel label {
+    .control-panel label { font-size: 14px; }
+    .saved-list {
+      position: absolute;
+      bottom: 10px;
+      left: 10px;
+      background: rgba(255, 255, 255, 0.95);
+      padding: 10px;
+      border-radius: 8px;
+      font-family: sans-serif;
       font-size: 14px;
+      z-index: 1000;
+      max-height: 200px;
+      overflow-y: auto;
     }
-
-    @media (max-width: 600px) {
-      .control-panel {
-        flex-direction: column;
-        width: 90%;
-      }
+    .saved-list button {
+      margin-top: 5px;
+      font-size: 13px;
     }
   </style>
 </head>
@@ -54,39 +57,50 @@
   </label>
 </div>
 
-<script>
-  const apiKey = '5b3ce3597851110001cf6248a2be22bc444b40739cbb57baf0661984'; // ここに自分のAPIキーを入れる
+<div class="saved-list" id="savedList">
+  <strong>保存した地点:</strong><br>
+  <div id="locationList"></div>
+</div>
 
-  const map = L.map('map').setView([35.6812, 139.7671], 13); // 東京駅初期位置
+<script>
+  const apiKey = 'YOUR_OPENROUTESERVICE_API_KEY';
+  const map = L.map('map').setView([35.6812, 139.7671], 13);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '© OpenStreetMap contributors'
   }).addTo(map);
 
   let isochroneLayer = null;
 
-  map.on('click', async function (e) {
+  map.on('click', function (e) {
     const lat = e.latlng.lat;
     const lng = e.latlng.lng;
+
+    const name = prompt("この地点に名前をつけて保存しますか？（例：学校前）");
+    if (name) {
+      saveLocation({ name, lat, lng });
+      drawIsochrone(lat, lng);
+    }
+  });
+
+  function drawIsochrone(lat, lng) {
     const profile = document.getElementById('profile').value;
-    const ranges = [600, 1200, 1800]; // 秒（10, 20, 30分）
+    const ranges = [600, 1200, 1800];
 
-    try {
-      const response = await fetch(`https://api.openrouteservice.org/v2/isochrones/${profile}`, {
-        method: 'POST',
-        headers: {
-          'Authorization': apiKey,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          locations: [[lng, lat]],
-          range: ranges,
-          interval: 600,
-          attributes: ['area']
-        })
-      });
-
-      const data = await response.json();
-
+    fetch(`https://api.openrouteservice.org/v2/isochrones/${profile}`, {
+      method: 'POST',
+      headers: {
+        'Authorization': apiKey,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        locations: [[lng, lat]],
+        range: ranges,
+        interval: 600,
+        attributes: ['area']
+      })
+    })
+    .then(response => response.json())
+    .then(data => {
       if (isochroneLayer) map.removeLayer(isochroneLayer);
       isochroneLayer = L.geoJSON(data, {
         style: function (feature) {
@@ -104,11 +118,39 @@
           };
         }
       }).addTo(map);
-    } catch (err) {
-      alert('エラー：等時間線の取得に失敗しました');
+      map.setView([lat, lng], 13);
+    })
+    .catch(err => {
+      alert('等時間線の取得に失敗しました');
       console.error(err);
-    }
-  });
+    });
+  }
+
+  function saveLocation(location) {
+    const locations = JSON.parse(localStorage.getItem('savedLocations') || '[]');
+    locations.push(location);
+    localStorage.setItem('savedLocations', JSON.stringify(locations));
+    updateSavedList();
+  }
+
+  function updateSavedList() {
+    const container = document.getElementById('locationList');
+    container.innerHTML = '';
+    const locations = JSON.parse(localStorage.getItem('savedLocations') || '[]');
+    locations.forEach((loc, index) => {
+      const div = document.createElement('div');
+      div.innerHTML = `📍 ${loc.name} <button onclick="goTo(${index})">表示</button>`;
+      container.appendChild(div);
+    });
+  }
+
+  window.goTo = function(index) {
+    const locations = JSON.parse(localStorage.getItem('savedLocations') || '[]');
+    const loc = locations[index];
+    drawIsochrone(loc.lat, loc.lng);
+  }
+
+  updateSavedList();
 </script>
 
 </body>
