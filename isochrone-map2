@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <title>等時間線マップ（Isochrone Map）</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Leaflet読み込み -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+  <style>
+    html, body { margin: 0; padding: 0; height: 100%; }
+    #map { height: 100%; }
+
+    .control-panel {
+      position: absolute;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(255, 255, 255, 0.9);
+      padding: 10px;
+      border-radius: 8px;
+      font-family: sans-serif;
+      z-index: 1000;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .control-panel label {
+      font-size: 14px;
+    }
+
+    @media (max-width: 600px) {
+      .control-panel {
+        flex-direction: column;
+        width: 90%;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<div class="control-panel">
+  <label>
+    移動手段：
+    <select id="profile">
+      <option value="foot-walking">徒歩</option>
+      <option value="driving-car">車</option>
+    </select>
+  </label>
+</div>
+
+<script>
+  const apiKey = '5b3ce3597851110001cf6248a2be22bc444b40739cbb57baf0661984'; // ここに自分のAPIキーを入れる
+
+  const map = L.map('map').setView([35.6812, 139.7671], 13); // 東京駅初期位置
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap contributors'
+  }).addTo(map);
+
+  let isochroneLayer = null;
+
+  map.on('click', async function (e) {
+    const lat = e.latlng.lat;
+    const lng = e.latlng.lng;
+    const profile = document.getElementById('profile').value;
+    const ranges = [600, 1200, 1800]; // 秒（10, 20, 30分）
+
+    try {
+      const response = await fetch(`https://api.openrouteservice.org/v2/isochrones/${profile}`, {
+        method: 'POST',
+        headers: {
+          'Authorization': apiKey,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          locations: [[lng, lat]],
+          range: ranges,
+          interval: 600,
+          attributes: ['area']
+        })
+      });
+
+      const data = await response.json();
+
+      if (isochroneLayer) map.removeLayer(isochroneLayer);
+      isochroneLayer = L.geoJSON(data, {
+        style: function (feature) {
+          const time = feature.properties.value;
+          const colors = {
+            600: '#cce5ff',
+            1200: '#66b3ff',
+            1800: '#0066cc'
+          };
+          return {
+            color: '#0055aa',
+            weight: 1,
+            fillColor: colors[time] || '#0078ff',
+            fillOpacity: 0.4
+          };
+        }
+      }).addTo(map);
+    } catch (err) {
+      alert('エラー：等時間線の取得に失敗しました');
+      console.error(err);
+    }
+  });
+</script>
+
+</body>
+</html>
