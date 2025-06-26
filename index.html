@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8">
-  <title>等時間線マップ（マーカー付き）</title>
+  <title>等時間線マップ（時間拡張版）</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
@@ -88,14 +88,11 @@
   <div id="locationList"></div>
 </div>
 
-<div class="legend">
-  <div><span class="legend-color" style="background:#ff6666"></span>10分圏内</div>
-  <div><span class="legend-color" style="background:#ffcc33"></span>20分圏内</div>
-  <div><span class="legend-color" style="background:#66cc66"></span>30分圏内</div>
+<div class="legend" id="legend">
 </div>
 
 <script>
-  const apiKey = '5b3ce3597851110001cf6248a2be22bc444b40739cbb57baf0661984';
+  const apiKey = 'YOUR_OPENROUTESERVICE_API_KEY';
   const map = L.map('map').setView([35.6812, 139.7671], 13);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '© OpenStreetMap contributors'
@@ -103,6 +100,31 @@
 
   let isochroneLayer = null;
   let marker = null;
+  let lastClickedLocation = null;
+
+  const minuteRanges = [5, 10, 20, 30, 40, 60, 120];
+  const rangeSeconds = minuteRanges.map(m => m * 60);
+
+  const colorMap = {
+    300: '#f7c6c6',
+    600: '#f79f9f',
+    1200: '#ffd966',
+    1800: '#b6d7a8',
+    2400: '#76c893',
+    3600: '#6fa8dc',
+    7200: '#8e7cc3'
+  };
+
+  function updateLegend() {
+    const legend = document.getElementById('legend');
+    legend.innerHTML = '';
+    minuteRanges.forEach(min => {
+      const sec = min * 60;
+      const div = document.createElement('div');
+      div.innerHTML = `<span class="legend-color" style="background:${colorMap[sec] || '#ccc'}"></span>${min}分圏内`;
+      legend.appendChild(div);
+    });
+  }
 
   map.on('click', function (e) {
     const lat = e.latlng.lat;
@@ -111,16 +133,12 @@
     if (marker) map.removeLayer(marker);
     marker = L.marker([lat, lng]).addTo(map);
 
-    const name = prompt("この地点に名前をつけて保存しますか？（例：学校前）");
-    if (name) {
-      saveLocation({ name, lat, lng });
-      drawIsochrone(lat, lng);
-    }
+    lastClickedLocation = { lat, lng };
+    drawIsochrone(lat, lng, true);
   });
 
-  function drawIsochrone(lat, lng) {
+  function drawIsochrone(lat, lng, askToSave = false) {
     const profile = document.getElementById('profile').value;
-    const ranges = [600, 1200, 1800];
 
     fetch(`https://api.openrouteservice.org/v2/isochrones/${profile}`, {
       method: 'POST',
@@ -130,8 +148,8 @@
       },
       body: JSON.stringify({
         locations: [[lng, lat]],
-        range: ranges,
-        interval: 600,
+        range: rangeSeconds,
+        interval: 300,
         attributes: ['area']
       })
     })
@@ -141,20 +159,22 @@
       isochroneLayer = L.geoJSON(data, {
         style: function (feature) {
           const time = feature.properties.value;
-          const colors = {
-            600: '#ff6666',
-            1200: '#ffcc33',
-            1800: '#66cc66'
-          };
           return {
             color: '#333',
             weight: 1,
-            fillColor: colors[time] || '#999999',
+            fillColor: colorMap[time] || '#999999',
             fillOpacity: 0.5
           };
         }
       }).addTo(map);
       map.setView([lat, lng], 13);
+
+      if (askToSave) {
+        const name = prompt("この地点に名前をつけて保存しますか？（例：学校前）");
+        if (name) {
+          saveLocation({ name, lat, lng });
+        }
+      }
     })
     .catch(err => {
       alert('等時間線の取得に失敗しました');
@@ -187,9 +207,17 @@
     if (marker) map.removeLayer(marker);
     marker = L.marker([loc.lat, loc.lng]).addTo(map);
 
+    lastClickedLocation = { lat: loc.lat, lng: loc.lng };
     drawIsochrone(loc.lat, loc.lng);
   }
 
+  document.getElementById('profile').addEventListener('change', () => {
+    if (lastClickedLocation) {
+      drawIsochrone(lastClickedLocation.lat, lastClickedLocation.lng);
+    }
+  });
+
+  updateLegend();
   updateSavedList();
 </script>
 
